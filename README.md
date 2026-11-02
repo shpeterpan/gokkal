@@ -5,4 +5,7 @@
 - 혼자: 봇 2~5명과
 - 같이: 서버 없이 휴대폰끼리 바로 잇는다(WebRTC). 방장 화면의 QR을 친구가 카메라로 찍고, 친구 화면에 뜬 답 QR을 방장이 찍는다.
 
-`index.html` 이 원본(claude.ai 아티팩트 형식), `./build.sh` 가 문서 머리를 붙여 `docs/index.html` 을 만든다. GitHub Pages 는 `docs/` 를 낸다.
+웹(광고 없음)은 https://shpeterpan.github.io/gokkal/ , 앱(iOS·Android, 광고)은 Capacitor 로 같은 번들을 싣는다.
+
+- `npm run dev` 개발, `npm run pages` 웹 판을 `docs/` 로, `bash scripts/cap-sync.sh` 앱 번들
+- 출시 준비는 `RELEASE.md`, 스토어 문구는 `store/listing.md`

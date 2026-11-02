@@ -1,0 +1,12 @@
+node_modules
+dist
+.env.app
+.DS_Store
+ios/App/Pods
+ios/App/App/public
+android/app/src/main/assets/public
+android/.gradle
+android/app/build
+android/build
+android/local.properties
+*.keystore

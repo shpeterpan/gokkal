@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">고깔 셋</string>
+    <string name="title_activity_main">고깔 셋</string>
+    <string name="package_name">com.gokkal.app</string>
+    <string name="custom_url_scheme">com.gokkal.app</string>
+</resources>
