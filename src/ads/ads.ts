@@ -1,6 +1,6 @@
 // 화면은 광고를 이 모듈로만 부른다. 광고 SDK 를 화면에서 직접 부르지 않는다.
-// 웹은 아무것도 띄우지 않는다. 앱 빌드(VITE_ADS=admob)를 네이티브에서 돌릴 때만 AdMob 을 불러온다.
-// 빌드 설정이 상수로 바뀌어 웹 번들에는 AdMob 코드가 들어가지 않는다.
+// 앱 빌드(VITE_ADS=admob)를 네이티브에서 돌릴 때는 AdMob, 웹은 AdSense 게시자 ID(VITE_ADSENSE_CLIENT)가 있을 때만 AdSense(web.ts).
+// 빌드 설정이 상수로 바뀌어 웹 번들에는 AdMob 코드가 들어가지 않는다. 둘 다 없으면 아무것도 띄우지 않는다.
 // 고깔 셋의 광고(오마고와 같은 규칙, 2026-11-02): 판 중에도 떠 있는 아래 배너 하나, 판 사이 전면 광고(policy.ts), 보상형 없음, 광고 없애기 한 번 결제.
 // 오마고 src/ads 를 그대로 옮겨 왔다.
 
@@ -61,6 +61,7 @@ let retrying: (() => void) | null = null
 
 /** 앱을 켤 때 한 번. 광고를 못 띄워도 게임은 그대로 된다. 켜다가 실패하면 앱이 다시 앞에 오거나 인터넷이 돌아올 때 다시 해 본다. */
 export async function startAds(): Promise<void> {
+  if (!Capacitor.isNativePlatform()) return startWebAds()
   // 빌드 설정을 여기 그대로 적어야 웹 번들에서 아래 AdMob 불러오기가 통째로 빠진다
   if (import.meta.env.VITE_ADS !== 'admob' || !Capacitor.isNativePlatform()) return
   if (starting || stopped) return
@@ -107,4 +108,19 @@ function retryLater(): void {
 
 function stopRetrying(): void {
   retrying?.()
+}
+
+/** 웹 판: AdSense. 광고 없애기 결제는 앱에만 있다. 불러오지 못하면(광고 차단 등) 광고 없이 그대로 한다. */
+async function startWebAds(): Promise<void> {
+  if (!import.meta.env.VITE_ADSENSE_CLIENT || starting || stopped || impl !== none) return
+  starting = true
+  try {
+    const { createWebAds } = await import('./web.ts')
+    impl = await createWebAds()
+    if (bannerShown) impl.banner(true)
+  } catch {
+    impl = none
+  } finally {
+    starting = false
+  }
 }

@@ -56,6 +56,7 @@ const STR = {
     restoreNone: '이 계정으로 산 기록이 없어요.', restoreFailed: '스토어에 닿지 못했어요. 인터넷 연결을 확인해 주세요.',
     adPrivacy: '광고 개인정보 설정', privacy: '개인정보 처리방침',
     coach: '◀ ▶로 가져올 곳을 고르고 가져오기를 눌러요',
+    nick: '내 이름', nickPh: '머리 위에 뜰 이름, 8자까지',
     run: '달리기', coachRun: '달리기를 빠르게 누를수록 더 빨리 뛰어요'
   },
   en: {
@@ -95,17 +96,24 @@ const STR = {
     restoreNone: 'No purchase found for this account.', restoreFailed: "Couldn't reach the store. Check your internet connection.",
     adPrivacy: 'Ad privacy choices', privacy: 'Privacy policy',
     coach: 'Pick a spot with ◀ ▶, then tap Grab',
+    nick: 'My name', nickPh: 'Shown above your head, up to 8 letters',
     run: 'Run', coachRun: 'Tap Run fast to sprint'
   }
 };
 
-const S = { view: 'first', count: 3, lang: 'auto', sound: true, haptic: true, theme: 'auto' };
+const S = { view: 'first', count: 3, lang: 'auto', sound: true, haptic: true, theme: 'auto', nick: '' };
 try { Object.assign(S, JSON.parse(localStorage.getItem('gokkal-set') || '{}')); } catch (e) {}
 S.count = [3, 4, 5, 6].includes(+S.count) ? +S.count : 3;
 if (!['first', 'third'].includes(S.view)) S.view = 'first';
 if (!['auto', 'ko', 'en'].includes(S.lang)) S.lang = 'auto';
 if (!['auto', 'light', 'dark'].includes(S.theme)) S.theme = 'auto';
 S.sound = S.sound !== false; S.haptic = S.haptic !== false;
+// 머리 위 이름표: 8글자까지, 줄바꿈·보이지 않는 글자는 뺀다(친구가 보낸 이름도 같은 규칙으로)
+function nickClean(v) {
+  return Array.from(String(v || '').replace(/[\u0000-\u001f\u007f-\u009f\u00ad\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/g, '').trim()).slice(0, 8).join('');
+}
+S.nick = nickClean(S.nick);
+const myNick = () => S.nick;
 function save() { try { localStorage.setItem('gokkal-set', JSON.stringify(S)); } catch (e) {} }
 
 let lang = 'ko';
@@ -129,7 +137,8 @@ function josa(w, a, b) {
 const subj = name => lang === 'ko' ? name + josa(name, '이', '가') : name;
 const colorName = i => STR[lang].colors[i];
 function nameOf(i) {
-  if (i === G.me) return t('me');
+  if (i === G.me) return myNick() || t('me');
+  if (G.names[i]) return G.names[i];
   const p = G.players[i];
   return p && p.kind === 'bot' ? t('botName', { c: colorName(i) }) : colorName(i);
 }
@@ -222,7 +231,7 @@ function makePlayer(color) {
 const G = {
   state: 'menu', role: 'solo', me: 0, players: [], cones: [], world: null, view: 'first',
   time: 0, countT: 0, lastN: -1, goT: 0, winner: -1, orbit: 0.6, hudEls: [], auto: null, homeArmed: false,
-  events: [], sendT: 0, resultTimer: 0, boost: 0
+  events: [], sendT: 0, resultTimer: 0, boost: 0, names: []
 };
 const input = { left: false, right: false, fwd: false, turnT: 0 };
 const P = () => G.players;
@@ -260,6 +269,7 @@ function buildWorld(n, humans) {
       ai: { target: -1, think: Math.random() * 0.4, grabT: 0 }
     });
   }
+  G.players.forEach(setTag);
   for (let k = 0; k < CONES; k++) {
     const a = k / CONES * TAU - Math.PI / 2, mesh = makeCone();
     w.add(mesh);
@@ -528,7 +538,7 @@ function beginMatch(n, humans, view) {
 }
 function startSolo() {
   audio();
-  G.role = 'solo'; G.me = 0;
+  G.role = 'solo'; G.me = 0; G.names = [];
   beginMatch(S.count, [0], S.count >= 6 ? 'third' : S.view);
 }
 function startHosted() {
@@ -539,8 +549,9 @@ function startHosted() {
   net.map = {};
   net.peers.forEach((slot, k) => { net.map[slot.id] = k + 1; });
   G.me = 0;
+  G.names = lobbyNames();
   beginMatch(n, humans, view);
-  net.broadcast({ k: 'start', n, view, humans, map: net.map });
+  net.broadcast({ k: 'start', n, view, humans, map: net.map, names: G.names });
 }
 function showResult() {
   if (G.state !== 'over') return;
@@ -605,6 +616,10 @@ function sync() {
     p.mesh.position.set(p.rx, 0, p.rz);
     p.mesh.rotation.y = p.rh;
     p.mesh.visible = !(fp && p.i === G.me);
+    // 이름표는 멀수록 키워서 화면에서 늘 읽히는 크기로(10m 안쪽은 그대로)
+    const k = Math.max(1, Math.hypot(camera.position.x - p.rx, camera.position.y - 2, camera.position.z - p.rz) / 10) * (fp ? 1.1 : 0.85);
+    p.tag.scale.set(p.tag.userData.w * k, p.tag.userData.h * k, 1);
+    p.tag.position.y = 2.0 + 0.35 * (k - 1);
     p.ring.visible = p.hold > 0;
     if (p.hold > 0) p.ring.geometry.setDrawRange(0, 6 * Math.max(1, Math.round(48 * Math.min(1, p.hold / HOLD))));
   }
@@ -645,7 +660,37 @@ function buildHud() {
     return { el, last: -1, nm: el.querySelector('.nm'), pips: [...el.querySelectorAll('.pips i')], extra: el.querySelector('.extra'), bar: el.querySelector('.bar b') };
   });
 }
-function refreshNames() { G.hudEls.forEach((h, i) => { h.nm.textContent = nameOf(i); }); }
+function refreshNames() {
+  G.hudEls.forEach((h, i) => { h.nm.textContent = nameOf(i); });
+  G.players.forEach(setTag);
+}
+// 머리 위 이름표(캔버스 그림을 붙인 스프라이트). 이름이 바뀔 때만 다시 그린다
+function setTag(p) {
+  const text = nameOf(p.i);
+  if (p.tag && p.tagText === text) return;
+  if (p.tag) { p.mesh.remove(p.tag); p.tag.material.map.dispose(); p.tag.material.dispose(); }
+  const c = document.createElement('canvas'), x = c.getContext('2d');
+  const font = '700 44px -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif';
+  x.font = font;
+  const w = Math.ceil(x.measureText(text).width) + 52, h = 72;
+  c.width = w; c.height = h;
+  x.font = font;
+  const r = 30;
+  x.beginPath();
+  x.moveTo(r + 4, 4); x.arcTo(w - 4, 4, w - 4, h - 4, r); x.arcTo(w - 4, h - 4, 4, h - 4, r); x.arcTo(4, h - 4, 4, 4, r); x.arcTo(4, 4, w - 4, 4, r); x.closePath();
+  x.fillStyle = 'rgba(255,255,255,0.94)'; x.fill();
+  x.lineWidth = 6; x.strokeStyle = hex(COLORS[p.i]); x.stroke();
+  x.fillStyle = '#15212B'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillText(text, w / 2, h / 2 + 2);
+  const tex = new THREE.CanvasTexture(c);
+  tex.minFilter = THREE.LinearFilter;
+  const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthWrite: false }));
+  tag.userData.w = 0.42 * w / h; tag.userData.h = 0.42;
+  tag.scale.set(tag.userData.w, tag.userData.h, 1);
+  tag.position.y = 2.0;
+  p.mesh.add(tag);
+  p.tag = tag; p.tagText = text;
+}
 function updateHud() {
   if (G.state === 'menu' || G.state === 'lobby' || !G.players.length) return;
   const cnt = counts();
@@ -854,7 +899,8 @@ const net = {
         b: G.players.filter(p => p.kind === 'bot').map(p => p.i),
         p: G.players.map(p => [r2(p.x), r2(p.z), r2(p.h), p.carry, r2(p.hold)]),
         c: G.cones.map(c => [r2(c.x), r2(c.z), c.owner, c.carrier]),
-        ev: G.events.splice(0)
+        ev: G.events.splice(0),
+        nm: G.names
       });
     } else {
       const me = G.players[G.me];
@@ -877,7 +923,7 @@ function leaveNet() {
   const all = net.peers.concat(net.pending ? [net.pending] : []);
   net.peers = []; net.pending = null;
   all.forEach(closeSlot);
-  Object.assign(net, { answer: '', myId: 0, peerIds: [], map: {} });
+  Object.assign(net, { answer: '', myId: 0, peerIds: [], names: [], map: {} });
 }
 function dropped(msg) {
   leaveNet();
@@ -958,8 +1004,17 @@ function guestLeft(slot) {
     toast(t('gone', { who: subj(colorName(idx)) }));
   }
 }
-function sendLobby() { net.broadcast({ k: 'lobby', peers: net.peers.map(p => p.id) }); }
+const lobbyNames = () => [myNick(), ...net.peers.map(p => p.nick || '')];
+function sendLobby() { net.broadcast({ k: 'lobby', peers: net.peers.map(p => p.id), names: lobbyNames() }); }
 function onGuestMsg(id, d) {
+  if (d.k === 'nick') {
+    const slot = net.peers.find(p => p.id === id);
+    if (!slot) return;
+    slot.nick = nickClean(d.v);
+    if (G.state === 'lobby') { sendLobby(); renderLobby(); }
+    else if (net.map[id] !== undefined) { G.names[net.map[id]] = slot.nick; refreshNames(); }
+    return;
+  }
   if (d.k !== 'me') return;
   const idx = net.map[id], p = idx !== undefined && G.players[idx];
   if (!p || p.kind !== 'human' || !Number.isFinite(d.x) || !Number.isFinite(d.z) || !Number.isFinite(d.h)) return;
@@ -1011,14 +1066,17 @@ async function joinWith(code) {
 function onHostMsg(d) {
   if (d.k === 'hello') {
     net.myId = d.id;
+    net.send({ k: 'nick', v: myNick() });
   } else if (d.k === 'lobby') {
     net.peerIds = Array.isArray(d.peers) ? d.peers : [];
+    net.names = Array.isArray(d.names) ? d.names.map(nickClean) : [];
     if (G.state !== 'lobby') showLobby(); else renderLobby();
   } else if (d.k === 'start') {
     const idx = d.map && d.map[net.myId];
     if (!Number.isInteger(idx) || !Number.isInteger(d.n)) return;
     audio();
     G.me = idx;
+    G.names = Array.isArray(d.names) ? d.names.map(nickClean) : [];
     beginMatch(d.n, Array.isArray(d.humans) ? d.humans : [0, idx], d.view === 'third' ? 'third' : 'first');
   } else if (d.k === 'busy') {
     dropped(t('errStarted'));
@@ -1046,6 +1104,10 @@ function applySnap(d) {
     c.owner = Number.isInteger(a[2]) ? a[2] : -1;
     c.carrier = Number.isInteger(a[3]) ? a[3] : -1;
   });
+  if (Array.isArray(d.nm)) {
+    const nm = d.nm.map(nickClean);
+    if (nm.join('\n') !== G.names.join('\n')) { G.names = nm; renamed = true; }
+  }
   if (renamed) refreshNames();
   G.time = +d.tm || 0; G.countT = +d.ct || 0; G.winner = Number.isInteger(d.w) ? d.w : -1;
   (Array.isArray(d.ev) ? d.ev : []).forEach(e => { if (e && typeof e === 'object') handleEvent(e); });
@@ -1071,7 +1133,9 @@ function renderLobby() {
     el.className = 'chip' + (k === mine ? ' me' : '');
     const dot = document.createElement('span'); dot.className = 'dot'; dot.style.background = hex(COLORS[k]);
     const nm = document.createElement('span');
-    nm.textContent = k === mine ? t('me') : k === 0 ? t('host', { c: colorName(0) }) : colorName(k);
+    const names = host ? lobbyNames() : net.names || [];
+    const who = k === mine ? myNick() || t('me') : names[k] || colorName(k);
+    nm.textContent = k === 0 && k !== mine ? t('host', { c: who }) : who;
     el.append(dot, nm);
     box.appendChild(el);
   }
@@ -1236,6 +1300,7 @@ function applyLang() {
   document.querySelectorAll('[data-t]').forEach(el => { el.textContent = t(el.dataset.t); });
   document.querySelectorAll('[data-aria]').forEach(el => { el.setAttribute('aria-label', t(el.dataset.aria)); });
   document.querySelectorAll('[data-n]').forEach(el => { el.textContent = t('n', { n: el.dataset.n }); });
+  $('optNick').placeholder = t('nickPh');
   refreshNames();
   G.gLabel = '';
 }
@@ -1320,6 +1385,7 @@ function closeSettings() {
   if (lastFocus && lastFocus.focus) lastFocus.focus({ preventScroll: true });
 }
 function syncSettings() {
+  $('optNick').value = S.nick;
   $('optSound').checked = S.sound;
   $('optHaptic').checked = S.haptic;
   $('hapticRow').hidden = !native && !navigator.vibrate;
@@ -1357,6 +1423,18 @@ addEventListener('keydown', e => { if (e.key === 'Escape' && !$('settings').hidd
   sheet.addEventListener('pointerup', end);
   sheet.addEventListener('pointercancel', end);
 })();
+let nickTimer = 0;
+$('optNick').addEventListener('input', e => {
+  clearTimeout(nickTimer);
+  nickTimer = setTimeout(() => {
+    S.nick = nickClean(e.target.value);
+    save();
+    if (G.role === 'host') { if (G.state === 'lobby') sendLobby(); else G.names[0] = myNick(); }
+    if (G.role === 'guest') net.send({ k: 'nick', v: myNick() });
+    if (G.state === 'lobby') renderLobby();
+    refreshNames();
+  }, 300);
+});
 $('optSound').addEventListener('change', e => { S.sound = e.target.checked; save(); if (S.sound) { audio(); sfx.select(); } });
 $('optHaptic').addEventListener('change', e => { S.haptic = e.target.checked; save(); buzz('light'); });
 document.querySelectorAll('input[name="theme"]').forEach(el => el.addEventListener('change', () => { S.theme = el.value; save(); applyTheme(); }));

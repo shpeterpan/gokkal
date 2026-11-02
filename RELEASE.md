@@ -36,6 +36,14 @@
 - 심사 메모: 혼자 하기로 모든 화면을 볼 수 있다. 같이 하기는 휴대폰 두 대가 필요하다(한 대가 방 만들기 → 친구 부르기 QR, 다른 한 대가 그 QR을 카메라로 찍으면 웹 판이 열리고, 그 화면의 QR을 방장이 찍는다). 서버는 없다.
 - 제출 전에는 `store-review-preflight` 스킬과 `~/src/ohma-release` 를 거친다.
 
+## 웹 판 광고 (AdSense, 코드는 들어가 있음)
+
+- 판 사이 전면 광고는 AdSense H5 게임 광고(Ad Placement API, `adBreak`)로 앱과 같은 규칙, 화면 아래 배너는 디스플레이 광고 단위(320x50).
+- 게시자 ID 를 넣기 전에는 웹이 광고 없이 만들어진다. 넣는 법: `.env.web.example` 을 `.env.production.local` 로 복사해 `VITE_ADSENSE_CLIENT`(ca-pub-…), `VITE_ADSENSE_BANNER_SLOT` 을 채우고 `npm run pages`.
+- 사용자가 할 일: AdSense 계정(ohmalab@gmail.com), 사이트 추가, H5 게임 광고 신청, 개인정보 보호 및 메시지(GDPR) 게시.
+- ads.txt 는 도메인 맨 위에 있어야 한다. `shpeterpan.github.io/gokkal/` 은 맨 위가 아니라서, 사용자 사이트 저장소(`shpeterpan.github.io`)를 만들어 ads.txt 를 두거나 ohmalab.com 같은 내 도메인으로 옮겨야 한다. github.io 주소는 승인이 어려울 수 있다.
+- 화면 확인: `VITE_ADSENSE_CLIENT=ca-pub-1234567890123456 VITE_ADSENSE_BANNER_SLOT=1234567890 VITE_ADSENSE_TEST=1 npx vite build` 로 만들면 구글 시험 광고("Interstitial ad example")가 뜬다(2026-11-02 확인).
+
 ## 4. 남은 일
 
 - 스토어 스크린샷(한국어·영어, 1인칭·3인칭·같이 하기 QR).

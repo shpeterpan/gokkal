@@ -90,7 +90,7 @@ legend, .lbl { font-size: 13px; font-weight: 600; color: var(--muted); padding: 
 .note { font-size: 13px; color: var(--muted); }
 .err { font-size: 14px; color: var(--danger); font-weight: 600; }
 .langrow { display: grid; gap: 0; }
-select, .code-in {
+select, .code-in, .text-in {
   min-height: 44px; font-size: 16px; padding: 0 12px; border-radius: 10px; box-sizing: border-box;
   border: 1px solid var(--line); background: var(--surface-2);
 }
@@ -235,3 +235,11 @@ details summary { font-size: 13px; color: var(--muted); cursor: pointer; min-hei
   background: var(--ctl); color: var(--ink); font-weight: 800; font-size: 16px; white-space: nowrap;
 }
 .runbtn.on span { background: var(--ctl-on); }
+
+/* 웹 판 아래 배너(AdSense). 앱은 AdMob 이 네이티브로 같은 자리에 띄운다 */
+.webad {
+  position: fixed; z-index: 3; left: 0; right: 0; bottom: env(safe-area-inset-bottom, 0px);
+  display: flex; justify-content: center; pointer-events: auto;
+}
+
+.text-in { width: 100%; min-width: 0; -webkit-user-select: text; user-select: text; }
