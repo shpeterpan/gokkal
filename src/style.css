@@ -219,7 +219,19 @@ details summary { font-size: 13px; color: var(--muted); cursor: pointer; min-hei
 /* 처음 판 안내 */
 .coach {
   position: fixed; z-index: 4; left: 50%; transform: translateX(-50%); max-width: calc(100% - 32px); box-sizing: border-box;
-  bottom: calc(156px + env(safe-area-inset-bottom, 0px) + var(--ad-space, 0px));
+  bottom: calc(196px + env(safe-area-inset-bottom, 0px) + var(--ad-space, 0px));
   padding: 10px 16px; border-radius: 12px; background: var(--ink); color: var(--surface); font-weight: 700; text-align: center;
   pointer-events: none; box-shadow: 0 4px 14px var(--shade);
 }
+
+/* 달리기: 오른손 엄지 자리. 둘레 고리가 지금 붙은 속도 */
+.runbtn {
+  position: absolute; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(100% + 14px);
+  width: 78px; height: 78px; border-radius: 50%; border: 0; padding: 5px; cursor: pointer; touch-action: none;
+  background: conic-gradient(var(--cone) calc(var(--boost, 0) * 360deg), var(--line) 0);
+}
+.runbtn span {
+  display: grid; place-items: center; width: 100%; height: 100%; border-radius: 50%;
+  background: var(--ctl); color: var(--ink); font-weight: 800; font-size: 16px; white-space: nowrap;
+}
+.runbtn.on span { background: var(--ctl-on); }

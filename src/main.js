@@ -12,6 +12,8 @@ const R = 15, BASE_D = 12.5, BASE_R = 1.8, PR = 0.45;
 const GRAB_R = 1.7;   // 봇이 손을 뻗는 거리
 const TOUCH_R = 1.2;  // 사람은 고깔에 닿으면 저절로 집는다
 const SPEED = 5.2, BOT_SPEED = 4.3, SNAP = Math.PI / 6;
+// 달리기: 그냥 뛰면 봇보다 조금 느리고, 달리기를 누를 때마다 속도가 붙고 금방 식는다. 초당 세 번쯤 누르면 가장 빠르다.
+const RUN_BASE = 4.0, BOOST_TAP = 0.8, BOOST_MAX = 3.6, BOOST_DECAY = 2.4;
 const CONES = 5, NEED = 3, HOLD = 1;
 const COLORS = [0x2F6FD6, 0x1F9A5F, 0xE3AE0E, 0xC8377A, 0x2B3138, 0x1597B8];
 const reduce = matchMedia('(prefers-reduced-motion: reduce)');
@@ -19,10 +21,10 @@ const reduce = matchMedia('(prefers-reduced-motion: reduce)');
 const STR = {
   ko: {
     title: '고깔 셋',
-    rule: '가운데 고깔 다섯 개 중 셋을 내 자리로 옮겨 1초 버티면 이겨요. ◀ ▶로 가져올 곳을 한 칸씩 고르고 가져오기를 누르면, 달려가 집어서 내 자리로 돌아와요. 남의 자리 고깔도 가져올 수 있어요.',
+    rule: '가운데 고깔 다섯 개 중 셋을 내 자리로 옮겨 1초 버티면 이겨요. ◀ ▶로 가져올 곳을 한 칸씩 고르고 가져오기를 누르면, 달려가 집어서 내 자리로 돌아와요. 달리기를 빠르게 누를수록 더 빨리 뛰어요. 남의 자리 고깔도 가져올 수 있어요.',
     view: '시점', first: '1인칭', third: '3인칭', players: '인원 (혼자 할 때)', n: '{n}명',
     six: '6명은 3인칭으로만 해요.', auto: '기기 설정 따름',
-    keys: '키보드: ← → 고르기, 스페이스 가져오기',
+    keys: '키보드: ← → 고르기, 스페이스 가져오기, ↑ 달리기',
     solo: '혼자 하기', together: '같이 하기', start: '시작',
     me: '나', botName: '{c} 봇', home: '내 자리로',
     colors: ['파랑', '초록', '노랑', '분홍', '검정', '하늘'],
@@ -53,14 +55,15 @@ const STR = {
     buyPending: '결제가 끝나면 광고가 사라져요.', buyFailed: '결제하지 못했어요. 잠시 뒤에 다시 해 주세요.',
     restoreNone: '이 계정으로 산 기록이 없어요.', restoreFailed: '스토어에 닿지 못했어요. 인터넷 연결을 확인해 주세요.',
     adPrivacy: '광고 개인정보 설정', privacy: '개인정보 처리방침',
-    coach: '◀ ▶로 가져올 곳을 고르고 가져오기를 눌러요'
+    coach: '◀ ▶로 가져올 곳을 고르고 가져오기를 눌러요',
+    run: '달리기', coachRun: '달리기를 빠르게 누를수록 더 빨리 뛰어요'
   },
   en: {
     title: 'Three Cones',
-    rule: 'Five cones sit in the middle. Carry three to your spot and keep them there for 1 second. Pick a spot one step at a time with ◀ ▶, then tap Grab to run over, pick one up and bring it home. You can take cones from other spots too.',
+    rule: 'Five cones sit in the middle. Carry three to your spot and keep them there for 1 second. Pick a spot one step at a time with ◀ ▶, then tap Grab to run over, pick one up and bring it home. The faster you tap Run, the faster you go. You can take cones from other spots too.',
     view: 'View', first: 'First person', third: 'Third person', players: 'Players (solo)', n: '{n}',
     six: 'Six players play in third person only.', auto: 'Device setting',
-    keys: 'Keyboard: ← → pick a spot, Space grab',
+    keys: 'Keyboard: ← → pick a spot, Space grab, ↑ run',
     solo: 'Play solo', together: 'Play together', start: 'Start',
     me: 'You', botName: '{c} bot', home: 'Go home',
     colors: ['Blue', 'Green', 'Yellow', 'Pink', 'Black', 'Sky'],
@@ -91,7 +94,8 @@ const STR = {
     buyPending: 'Ads go away once the payment completes.', buyFailed: "Couldn't complete the payment. Try again in a moment.",
     restoreNone: 'No purchase found for this account.', restoreFailed: "Couldn't reach the store. Check your internet connection.",
     adPrivacy: 'Ad privacy choices', privacy: 'Privacy policy',
-    coach: 'Pick a spot with ◀ ▶, then tap Grab'
+    coach: 'Pick a spot with ◀ ▶, then tap Grab',
+    run: 'Run', coachRun: 'Tap Run fast to sprint'
   }
 };
 
@@ -218,7 +222,7 @@ function makePlayer(color) {
 const G = {
   state: 'menu', role: 'solo', me: 0, players: [], cones: [], world: null, view: 'first',
   time: 0, countT: 0, lastN: -1, goT: 0, winner: -1, orbit: 0.6, hudEls: [], auto: null, homeArmed: false,
-  events: [], sendT: 0, resultTimer: 0
+  events: [], sendT: 0, resultTimer: 0, boost: 0
 };
 const input = { left: false, right: false, fwd: false, turnT: 0 };
 const P = () => G.players;
@@ -428,7 +432,7 @@ function meUpdate(dt) {
     if (d2(me.x, me.z, tx, tz) < 0.4) return;
     const diff = wrap(Math.atan2(tx - me.x, tz - me.z) - me.h), tr = 7 * dt;
     me.h += Math.max(-tr, Math.min(tr, diff)); me.th = me.h;
-    move(me, SPEED * dt * (Math.abs(diff) < 0.8 ? 1 : 0.4));
+    move(me, (RUN_BASE + G.boost) * dt * (Math.abs(diff) < 0.8 ? 1 : 0.4));
     return;
   }
   // 가만히 있을 땐 고른 곳을 바라본다
@@ -443,7 +447,17 @@ function act() {
   const me = G.players[G.me];
   if (me.carry >= 0) return;
   const c = nearestAt(G.sel);
-  if (c) { G.auto = { cone: c.i }; coachOff(); }
+  if (c) { G.auto = { cone: c.i }; coachRun(); }
+}
+// 달리기 한 번 누름. 서 있으면 가져오기처럼 출발하고, 뛰는 중이면 속도가 붙는다
+function sprint() {
+  if (G.state !== 'play') return;
+  if (!G.auto) act();
+  if (!G.auto) return;
+  G.boost = Math.min(BOOST_MAX, G.boost + BOOST_TAP);
+  sfx.step(G.boost / BOOST_MAX);
+  buzz('tap');
+  coachOff();
 }
 
 /* ---------- 흐름 ---------- */
@@ -484,6 +498,8 @@ function update(dt) {
   }
   if (G.goT > 0) { G.goT -= dt; if (G.goT <= 0) $('count').hidden = true; }
   if (G.state === 'play') {
+    G.boost = Math.max(0, G.boost - BOOST_DECAY * dt);
+    if (!G.auto) G.boost = 0;
     meUpdate(dt);
     if (authority()) simulate(dt);
   }
@@ -506,7 +522,7 @@ function beginMatch(n, humans, view) {
   buildWorld(n, humans);
   buildHud();
   Object.assign(input, { left: false, right: false, fwd: false, turnT: 0 });
-  G.time = 0; G.countT = 3; G.lastN = -1; G.goT = 0; G.winner = -1; G.auto = null; G.homeArmed = false; G.events = []; G.sel = 'c'; G.gLabel = '';
+  G.time = 0; G.countT = 3; G.lastN = -1; G.goT = 0; G.winner = -1; G.auto = null; G.homeArmed = false; G.events = []; G.sel = 'c'; G.boost = 0; G.gLabel = '';
   document.querySelectorAll('.ctl.on').forEach(el => el.classList.remove('on'));
   setState('count');
 }
@@ -568,7 +584,7 @@ function placeCamera() {
   } else if (G.view === 'first') {
     camera.clearViewOffset();
     const me = G.players[G.me];
-    camera.fov = aspect < 1 ? 80 : 70;
+    camera.fov = (aspect < 1 ? 80 : 70) + (reduce.matches ? 0 : G.boost * 2.5);
     camera.position.set(me.x, 1.55, me.z);
     // 세로 화면은 하늘이 반을 먹으니 고개를 조금 더 숙인다
     camera.lookAt(me.x + Math.sin(me.h) * 10, aspect < 1 ? -0.4 : 0.9, me.z + Math.cos(me.h) * 10);
@@ -641,6 +657,8 @@ function updateHud() {
     }
     h.bar.style.transform = 'scaleX(' + Math.min(1, G.players[i].hold / HOLD) + ')';
   });
+  const ring = Math.round(G.boost / BOOST_MAX * 100) / 100;
+  if (ring !== G.ringShown) { G.ringShown = ring; $('bRun').style.setProperty('--boost', ring); }
   const gme = G.players[G.me], n = conesAt(G.sel).length;
   const label = gme.carry >= 0 ? t('carrying') : spotName(G.sel) + ' ' + (n === 1 ? t('cnt1') : t('cnt', { n }));
   const off = gme.carry >= 0 || n === 0 || G.state !== 'play';
@@ -705,6 +723,7 @@ function where(x, z) {
 const sfx = {
   grab() { tone(520, 0.09, { type: 'triangle', to: 780 }); },
   select() { tone(700, 0.05, { type: 'triangle', vol: 0.06 }); },
+  step(k) { tone(220 + 260 * k, 0.04, { type: 'triangle', vol: 0.05 }); },
   deposit() { tone(300, 0.14, { type: 'square', vol: 0.05 }); tone(450, 0.12, { type: 'triangle', delay: 0.06 }); },
   stolen(p) { const w = where(p.x, p.z); tone(330, 0.25, { type: 'sawtooth', vol: 0.07 * w.vol, to: 180, pan: w.pan }); },
   tick(p) { const w = p.i === G.me ? { pan: 0, vol: 1 } : where(p.base.x, p.base.z); tone(p.i === G.me ? 1046 : 880, 0.06, { vol: 0.1 * w.vol, pan: w.pan }); },
@@ -1164,6 +1183,7 @@ function bindTap(el, fn) {
 bindTap($('bL'), () => stepSpot(1));
 bindTap($('bR'), () => stepSpot(-1));
 bindTap($('bG'), act);
+bindTap($('bRun'), sprint);
 function goHome() { if (G.state === 'play' || G.state === 'count') G.auto = { home: true }; }
 $('homeBtn').addEventListener('click', goHome);
 
@@ -1190,7 +1210,8 @@ addEventListener('keydown', e => {
   if ((G.state !== 'play' && G.state !== 'count') || e.repeat) return;
   if (e.code === 'ArrowLeft' || e.code === 'KeyA') { e.preventDefault(); stepSpot(1); }
   else if (e.code === 'ArrowRight' || e.code === 'KeyD') { e.preventDefault(); stepSpot(-1); }
-  else if (e.code === 'Space' || e.code === 'ArrowUp') { e.preventDefault(); act(); }
+  else if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); act(); }
+  else if (e.code === 'ArrowUp' || e.code === 'KeyW') { e.preventDefault(); sprint(); }
   else if (e.code === 'KeyH') goHome();
 });
 
@@ -1272,12 +1293,13 @@ function buzz(kind) {
   if (native) {
     const go = h => {
       if (kind === 'win') h.Haptics.notification({ type: 'SUCCESS' }).catch(() => {});
+      else if (kind === 'tap') h.Haptics.selectionChanged().catch(() => {});
       else h.Haptics.impact({ style: kind === 'heavy' ? 'HEAVY' : 'LIGHT' }).catch(() => {});
     };
     if (hapticsMod) go(hapticsMod);
     else import('@capacitor/haptics').then(h => { hapticsMod = h; go(h); }).catch(() => {});
   } else if (navigator.vibrate) {
-    try { navigator.vibrate(kind === 'heavy' ? 40 : kind === 'win' ? [30, 60, 30] : 12); } catch (_) {}
+    try { navigator.vibrate(kind === 'heavy' ? 40 : kind === 'win' ? [30, 60, 30] : kind === 'tap' ? 6 : 12); } catch (_) {}
   }
 }
 
@@ -1371,6 +1393,19 @@ function coachOn() {
   coachOn.timer = setTimeout(coachOff, 5000);
 }
 function coachOff() { $('coach').hidden = true; }
+// 처음 두 번 뛸 때 달리기 안내
+let runLeft = 2;
+try { runLeft = Math.max(0, 2 - (+localStorage.getItem('gokkal-coached-run') || 0)); } catch (_) {}
+function coachRun() {
+  coachOff();
+  if (runLeft <= 0) return;
+  runLeft--;
+  try { localStorage.setItem('gokkal-coached-run', String(2 - runLeft)); } catch (_) {}
+  const el = $('coach');
+  el.textContent = t('coachRun'); el.hidden = false;
+  clearTimeout(coachOn.timer);
+  coachOn.timer = setTimeout(coachOff, 4000);
+}
 
 /* ---------- 돌리기 ---------- */
 function resize() {
