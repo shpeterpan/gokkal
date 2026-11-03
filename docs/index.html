@@ -10,8 +10,8 @@
 <link rel="icon" href="./favicon-64.png" type="image/png">
 <link rel="apple-touch-icon" href="./icon-180.png">
 <title>고깔 셋</title>
-  <script type="module" crossorigin src="./assets/index-CzOHJOLj.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/index-BMjD1SCV.css">
+  <script type="module" crossorigin src="./assets/index-D1i6WLmt.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-CjCXYI2b.css">
 </head>
 <body>
 <canvas id="scene" aria-hidden="true"></canvas>
@@ -135,6 +135,7 @@
 </section>
 
 <div id="controls" class="controls" hidden>
+  <button id="bRun" class="runbtn" type="button"><span data-t="run"></span></button>
   <button id="bL" class="ctl" type="button" data-aria="left"><svg viewBox="0 0 28 28" aria-hidden="true"><path d="M17 6 9 14l8 8" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
   <button id="bG" class="ctl grab" type="button"><span class="gmain" data-t="grab"></span><span id="gsub" class="gsub"></span></button>
   <button id="bR" class="ctl" type="button" data-aria="right"><svg viewBox="0 0 28 28" aria-hidden="true"><path d="m11 6 8 8-8 8" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
@@ -147,6 +148,10 @@
     <h2 id="setT" data-t="settings"></h2>
     <button id="closeSettings" class="secondary small" type="button" data-t="done"></button>
   </div>
+  <label class="langrow" for="optNick">
+    <span class="lbl" data-t="nick"></span>
+    <input id="optNick" class="text-in" type="text" maxlength="16" autocomplete="nickname" enterkeyhint="done" spellcheck="false">
+  </label>
   <div class="setrow">
     <span data-t="sound"></span>
     <label class="switch"><input id="optSound" type="checkbox" role="switch"><span></span></label>
