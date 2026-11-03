@@ -5,6 +5,7 @@
 // 오마고 src/ads 를 그대로 옮겨 왔다.
 
 import { Capacitor } from '@capacitor/core'
+import { reserveBannerSpace } from './bannerSpace.ts'
 import type { Break } from './policy.ts'
 import { isAdFree, onAdFree } from './purchase.ts'
 
@@ -36,6 +37,8 @@ let stopped = false
 export const ads: AdService = {
   banner: (show) => {
     bannerShown = show
+    // 광고를 켠 앱 빌드는 광고가 있든 없든(못 받음·광고 없애기·동의 안 함·켜기 전) 배너 자리를 늘 비운다(bannerSpace.ts)
+    if (adsBuild()) reserveBannerSpace(show)
     impl.banner(show)
   },
   atBreak: (b) => impl.atBreak(b),

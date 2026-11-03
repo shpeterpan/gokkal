@@ -8,6 +8,7 @@ import { Capacitor } from '@capacitor/core'
 import { AdMob, AdmobConsentStatus, BannerAdPluginEvents, BannerAdPosition, BannerAdSize, InterstitialAdPluginEvents, MaxAdContentRating, type AdmobConsentInfo } from '@capacitor-community/admob'
 import { readJson, writeJson } from './store.ts'
 import type { AdService } from './ads.ts'
+import { rememberBannerHeight } from './bannerSpace.ts'
 import { DEFAULT_RULE, EMPTY_HISTORY, onBreak, type AdHistory } from './policy.ts'
 
 // https://developers.google.com/admob/ios/test-ads , /android/test-ads
@@ -17,16 +18,12 @@ const TEST_IDS = {
 }
 
 const HISTORY_KEY = 'gokkal.ads'
-/** 지난번에 받은 배너 높이. 광고가 오기 전에 이만큼 자리를 먼저 비운다(늦게 와도 판이 한 번 밀리지 않게) */
-const BANNER_HEIGHT_KEY = 'gokkal.bannerHeight'
 /** 지난번에 광고를 띄워도 된다는 동의를 받았는지. 오프라인으로 켜서 동의 확인이 안 될 때 쓴다 */
 const CONSENT_KEY = 'gokkal.adsConsent'
 /** 미리 받아 둔 광고는 한 시간쯤 지나면 못 쓴다 */
 const STALE_MS = 50 * 60_000
 /** 전면 광고가 닫혔다는 이벤트를 이만큼 기다린다 */
 const INTERSTITIAL_MS = 120_000
-/** 배너와 판 아래 줄(◀ 가져오기 ▶ 단추) 사이 틈. 바로 붙으면 누르려다 광고를 누른다(구글 정책에도 어긋난다) */
-const AD_GAP = 14
 
 function adIds() {
   const platform = Capacitor.getPlatform() === 'ios' ? 'ios' : 'android'
@@ -100,9 +97,8 @@ export async function createAdMob(restart: () => void): Promise<AdService> {
   await AdMob.initialize(INIT)
 
   // 배너: 보일 화면에 들어올 때 받고 떠날 때 지운다(숨겨 두기는 쓰지 않는다: 보이지 않는 배너가 새로 고쳐지면 구글 정책에 어긋난다).
-  // 배너가 화면 아래를 덮는 만큼(+ 틈) 페이지 아래에 자리를 비운다(App.css 의 --ad-space).
+  // 배너 자리(style.css 의 --ad-space)는 광고가 있든 없든 ads.ts 가 비워 둔다(bannerSpace.ts). 여기서는 받은 배너의 높이만 알린다.
   let stopped = false
-  const setSpace = (px: number) => document.documentElement.style.setProperty('--ad-space', `${px}px`)
   let bannerWanted = false
   let bannerPhase: 'off' | 'loading' | 'on' = 'off'
   await AdMob.addListener(BannerAdPluginEvents.SizeChanged, (size) => {
@@ -113,32 +109,26 @@ export async function createAdMob(restart: () => void): Promise<AdService> {
       return
     }
     bannerPhase = 'on'
-    const height = Math.ceil(size.height)
-    writeJson(BANNER_HEIGHT_KEY, height)
-    setSpace(height + AD_GAP)
+    rememberBannerHeight(Math.ceil(size.height))
   })
   await AdMob.addListener(BannerAdPluginEvents.FailedToLoad, () => {
+    // 자리는 그대로 두고(판 아래 줄이 움직이지 않게), 다음에 배너를 보일 때 다시 받는다
     bannerPhase = 'off'
-    if (!stopped) setSpace(0)
   })
   const showBanner = (show: boolean) => {
     if (stopped || show === bannerWanted) return
     bannerWanted = show
     if (!show) {
-      setSpace(0)
       if (bannerPhase === 'on') {
         bannerPhase = 'off'
         void AdMob.removeBanner().catch(() => {})
       }
       return
     }
-    const last = readJson<number>(BANNER_HEIGHT_KEY)
-    if (typeof last === 'number' && last > 0) setSpace(last + AD_GAP)
     if (bannerPhase !== 'off') return
     bannerPhase = 'loading'
     void AdMob.showBanner({ adId: ids.banner, adSize: BannerAdSize.ADAPTIVE_BANNER, position: BannerAdPosition.BOTTOM_CENTER, margin: 0 }).catch(() => {
       bannerPhase = 'off'
-      if (!stopped) setSpace(0)
     })
   }
 
@@ -205,7 +195,6 @@ export async function createAdMob(restart: () => void): Promise<AdService> {
     },
     async stop() {
       stopped = true
-      setSpace(0)
       await AdMob.removeBanner().catch(() => {})
     },
   }
