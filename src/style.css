@@ -243,3 +243,22 @@ details summary { font-size: 13px; color: var(--muted); cursor: pointer; min-hei
 }
 
 .text-in { width: 100%; min-width: 0; -webkit-user-select: text; user-select: text; }
+
+/* 사방 줄다리기: 아래 가운데 큰 당기기 단추. 둘레 고리가 남은 기력 */
+.hud.tug .pips, .hud.tug .extra { display: none; }
+.tugctl {
+  position: fixed; z-index: 3; left: 0; right: 0; bottom: calc(18px + env(safe-area-inset-bottom, 0px) + var(--ad-space, 0px));
+  display: flex; justify-content: center; pointer-events: none;
+}
+.pullbtn {
+  pointer-events: auto; width: 132px; height: 132px; border-radius: 50%; border: 0; padding: 7px; cursor: pointer; touch-action: none;
+  background: conic-gradient(var(--cone) calc(var(--stam, 1) * 360deg), var(--line) 0);
+}
+.pullbtn > span {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; width: 100%; height: 100%; border-radius: 50%;
+  background: var(--ctl); color: var(--ink); line-height: 1.2;
+}
+.pullbtn b { font-size: 22px; font-weight: 800; white-space: nowrap; }
+.pullbtn small { font-size: 12px; font-weight: 700; color: var(--muted); min-height: 1.2em; white-space: nowrap; }
+.pullbtn.on > span { background: var(--ctl-on); transform: scale(.97); }
+@media (prefers-reduced-motion: reduce) { .pullbtn.on > span { transform: none; } }

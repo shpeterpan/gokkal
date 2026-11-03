@@ -10,8 +10,8 @@
 <link rel="icon" href="./favicon-64.png" type="image/png">
 <link rel="apple-touch-icon" href="./icon-180.png">
 <title>고깔 셋</title>
-  <script type="module" crossorigin src="./assets/index-D1i6WLmt.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/index-CjCXYI2b.css">
+  <script type="module" crossorigin src="./assets/index-e6JvKTxP.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-DlZ4cDuV.css">
 </head>
 <body>
 <canvas id="scene" aria-hidden="true"></canvas>
@@ -27,10 +27,17 @@
 <section id="menu" class="panel" aria-labelledby="ttl">
   <div class="brand">
     <svg viewBox="0 0 30 30" aria-hidden="true"><g fill="#F26B1D"><path d="M7.2 4h2.6l3.4 10H3.8z"/><path d="M20.2 4h2.6l3.4 10h-9.4z"/><path d="M13.5 10h3l4.2 13H9.3z"/><rect x="2.6" y="13.4" width="11.8" height="1.8" rx=".6"/><rect x="15.6" y="13.4" width="11.8" height="1.8" rx=".6"/><rect x="7.8" y="22.4" width="14.4" height="2.2" rx=".7"/></g><g fill="#fff"><path d="M6.4 7.4h4.2l.8 2.3H5.6z"/><path d="M19.4 7.4h4.2l.8 2.3h-5.8z"/><path d="M12.6 14.2h4.8l1 3H11.6z"/></g></svg>
-    <h1 id="ttl" data-t="title"></h1>
+    <h1 id="ttl"></h1>
     <button id="openSettings" class="iconbtn" type="button" data-aria="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l2-1.6-2-3.4-2.4 1a7.5 7.5 0 0 0-2.6-1.5L14 2.5h-4l-.4 2.5A7.5 7.5 0 0 0 7 6.5l-2.4-1-2 3.4 2 1.6a7.6 7.6 0 0 0 0 3l-2 1.6 2 3.4 2.4-1a7.5 7.5 0 0 0 2.6 1.5l.4 2.5h4l.4-2.5a7.5 7.5 0 0 0 2.6-1.5l2.4 1 2-3.4-2-1.6Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></button>
   </div>
-  <p class="rule" data-t="rule"></p>
+  <fieldset>
+    <legend data-t="game"></legend>
+    <div class="seg" role="radiogroup">
+      <label><input type="radio" name="game" id="g-cones" value="cones"><span data-t="gameCones"></span></label>
+      <label><input type="radio" name="game" id="g-tug" value="tug"><span data-t="gameTug"></span></label>
+    </div>
+  </fieldset>
+  <p class="rule" id="rule"></p>
   <fieldset>
     <legend data-t="view"></legend>
     <div class="seg" role="radiogroup">
@@ -48,7 +55,7 @@
       <label><input type="radio" name="count" id="c6" value="6"><span data-n="6"></span></label>
     </div>
   </fieldset>
-  <p class="keys" data-t="keys"></p>
+  <p class="keys" id="keys"></p>
   <p id="menuErr" class="err" role="alert" hidden></p>
   <div class="row">
     <button id="solo" class="primary" type="button" data-t="solo"></button>
@@ -100,6 +107,14 @@
     </details>
   </div>
   <button id="inviteBtn" class="secondary" type="button" data-t="invite"></button>
+  <fieldset id="lobGameWrap">
+    <legend data-t="game"></legend>
+    <div class="seg" role="radiogroup">
+      <label><input type="radio" name="lgame" id="lg-cones" value="cones"><span data-t="gameCones"></span></label>
+      <label><input type="radio" name="lgame" id="lg-tug" value="tug"><span data-t="gameTug"></span></label>
+    </div>
+  </fieldset>
+  <p id="lobGame" class="note" hidden></p>
   <fieldset id="lobViewWrap">
     <legend data-t="view"></legend>
     <div class="seg" role="radiogroup">
@@ -134,6 +149,9 @@
   </div>
 </section>
 
+<div id="tugControls" class="tugctl" hidden>
+  <button id="bPull" class="pullbtn" type="button"><span><b data-t="pull"></b><small id="psub"></small></span></button>
+</div>
 <div id="controls" class="controls" hidden>
   <button id="bRun" class="runbtn" type="button"><span data-t="run"></span></button>
   <button id="bL" class="ctl" type="button" data-aria="left"><svg viewBox="0 0 28 28" aria-hidden="true"><path d="M17 6 9 14l8 8" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>

@@ -5,6 +5,7 @@ import '@fontsource/black-han-sans';
 import './style.css';
 import { Capacitor } from '@capacitor/core';
 import { ads, startAds } from './ads/ads.ts';
+import { createTug, TUG } from './games/tug.js';
 import { startPurchases, purchasesAvailable, isAdFree, onAdFree, removeAdsPrice, buyRemoveAds, restoreRemoveAds } from './ads/purchase.ts';
 
 const TAU = Math.PI * 2;
@@ -58,7 +59,12 @@ const STR = {
     adPrivacy: '광고 개인정보 설정', privacy: '개인정보 처리방침',
     coach: '◀ ▶로 가져올 곳을 고르고 가져오기를 눌러요',
     nick: '내 이름', nickPh: '머리 위에 뜰 이름, 8자까지',
-    run: '달리기', coachRun: '달리기를 빠르게 누를수록 더 빨리 뛰어요'
+    run: '달리기', coachRun: '달리기를 빠르게 누를수록 더 빨리 뛰어요',
+    game: '게임', gameCones: '고깔 셋', gameTug: '사방 줄다리기', gameIs: '게임: {g}',
+    ruleTug: '모서리에 선 모두가 가운데 매듭에 묶인 줄을 당겨요. 매듭을 내 쪽으로 끌어와 내 깃발에 먼저 손이 닿으면 이겨요. 당기기를 빠르게 누를수록 세게 당기지만, 쉬지 않으면 힘이 빠져요.',
+    keysTug: '키보드: 스페이스나 ↑ 당기기', pull: '당기기', tired: '힘 빠짐',
+    near: '{who} 깃발 앞이에요', nearMe: '깃발이 코앞이에요', loseTug: '{who} 깃발을 먼저 잡았어요',
+    coachTug: '당기기를 빠르게 누를수록 세게 당겨요. 고리가 비면 잠깐 쉬어요'
   },
   en: {
     title: 'Three Cones',
@@ -98,16 +104,22 @@ const STR = {
     adPrivacy: 'Ad privacy choices', privacy: 'Privacy policy',
     coach: 'Pick a spot with ◀ ▶, then tap Grab',
     nick: 'My name', nickPh: 'Shown above your head, up to 8 letters',
-    run: 'Run', coachRun: 'Tap Run fast to sprint'
+    run: 'Run', coachRun: 'Tap Run fast to sprint',
+    game: 'Game', gameCones: 'Three Cones', gameTug: 'Corner Tug', gameIs: 'Game: {g}',
+    ruleTug: 'Everyone stands at a corner, tied to one knot in the middle. Drag the knot your way until you reach your flag first. The faster you tap Pull, the harder you pull, but you tire out if you never rest.',
+    keysTug: 'Keyboard: Space or ↑ to pull', pull: 'Pull', tired: 'Out of breath',
+    near: '{who} is at the flag', nearMe: 'Your flag is right there', loseTug: '{who} grabbed the flag first',
+    coachTug: 'Tap Pull fast to pull hard. When the ring empties, rest a moment'
   }
 };
 
-const S = { view: 'first', count: 3, lang: 'auto', sound: true, haptic: true, theme: 'auto', nick: '' };
+const S = { game: 'cones', view: 'first', count: 3, lang: 'auto', sound: true, haptic: true, theme: 'auto', nick: '' };
 try { Object.assign(S, JSON.parse(localStorage.getItem('gokkal-set') || '{}')); } catch (e) {}
 S.count = [3, 4, 5, 6].includes(+S.count) ? +S.count : 3;
 if (!['first', 'third'].includes(S.view)) S.view = 'first';
 if (!['auto', 'ko', 'en'].includes(S.lang)) S.lang = 'auto';
 if (!['auto', 'light', 'dark'].includes(S.theme)) S.theme = 'auto';
+if (!['cones', 'tug'].includes(S.game)) S.game = 'cones';
 S.sound = S.sound !== false; S.haptic = S.haptic !== false;
 // 머리 위 이름표: 8글자까지, 줄바꿈·보이지 않는 글자는 뺀다(친구가 보낸 이름도 같은 규칙으로)
 function nickClean(v) {
@@ -232,7 +244,7 @@ function makePlayer(color) {
 const G = {
   state: 'menu', role: 'solo', me: 0, players: [], cones: [], world: null, view: 'first',
   time: 0, countT: 0, lastN: -1, goT: 0, winner: -1, orbit: 0.6, hudEls: [], auto: null, homeArmed: false,
-  events: [], sendT: 0, resultTimer: 0, boost: 0, taps: [], names: []
+  events: [], sendT: 0, resultTimer: 0, boost: 0, taps: [], names: [], game: S.game, knot: { x: 0, z: 0, vx: 0, vz: 0 }
 };
 const input = { left: false, right: false, fwd: false, turnT: 0 };
 const P = () => G.players;
@@ -241,12 +253,23 @@ const wrap = a => { while (a > Math.PI) a -= TAU; while (a < -Math.PI) a += TAU;
 const r2 = v => Math.round(v * 100) / 100;
 const authority = () => G.role !== 'guest';
 const isLocal = p => p.i === G.me || (authority() && p.kind === 'bot');
+// 최근 0.8초 동안 누른 빠르기(초당 번). 달리기와 당기기가 같이 쓴다
+const tapRate = () => G.taps.length / TAP_WINDOW;
+const tug = createTug({ THREE, G, lam, flat, makePlayer, poleG, poleM, flagG, COLORS, emit: e => emit(e), tapRate });
+const gameName = g => t(g === 'tug' ? 'gameTug' : 'gameCones');
 
 function buildWorld(n, humans) {
   if (G.world) scene.remove(G.world);
   const w = new THREE.Group();
   G.world = w; scene.add(w);
   G.players = []; G.cones = [];
+  if (G.game === 'tug') {
+    tug.build(n, humans, w);
+    tug.place();
+    G.players.forEach(setTag);
+    pick.visible = false;
+    return;
+  }
   for (let i = 0; i < n; i++) {
     const a = Math.PI / 2 + i * TAU / n, bx = Math.cos(a) * BASE_D, bz = Math.sin(a) * BASE_D, col = COLORS[i];
     const disc = flat(new THREE.Mesh(new THREE.CircleGeometry(BASE_R, 40), new THREE.MeshLambertMaterial({ color: col, transparent: true, opacity: 0.5 })));
@@ -476,22 +499,24 @@ function setState(st) {
   G.state = st;
   if (st === 'count') {
     hidePanels();
-    $('hud').hidden = false; $('controls').hidden = false; $('homeBtn').hidden = false;
+    const tg = G.game === 'tug';
+    $('hud').hidden = false; $('controls').hidden = tg; $('homeBtn').hidden = tg; $('tugControls').hidden = !tg;
+    $('hud').classList.toggle('tug', tg);
     $('compass').style.display = G.view === 'first' ? '' : 'none';
     G.lastN = -1;
   } else if (st === 'play') {
-    G.goT = 0.6; showCount(t('go')); sfx.count(0); coachOn();
+    G.goT = 0.6; showCount(t('go')); sfx.count(0); coachOn(G.game);
   } else if (st === 'over') {
     G.auto = null;
     coachOff();
-    $('controls').hidden = true; $('homeBtn').hidden = true;
+    $('controls').hidden = true; $('homeBtn').hidden = true; $('tugControls').hidden = true;
     if (G.winner === G.me) { sfx.win(); buzz('win'); } else sfx.lose();
     clearTimeout(G.resultTimer);
     G.resultTimer = setTimeout(showResult, 800);
   } else {
     // menu · lobby
     clearTimeout(G.resultTimer);
-    ['hud', 'controls', 'homeBtn', 'result', 'count', 'toast'].forEach(id => { $(id).hidden = true; });
+    ['hud', 'controls', 'tugControls', 'homeBtn', 'result', 'count', 'toast'].forEach(id => { $(id).hidden = true; });
   }
 }
 function hidePanels() { ['menu', 'joinPanel', 'answerPanel', 'lobby', 'result'].forEach(id => { $(id).hidden = true; }); }
@@ -508,9 +533,21 @@ function update(dt) {
     if (G.state === 'count' && n !== G.lastN && n > 0) { G.lastN = n; showCount(String(n)); sfx.count(n); }
   }
   if (G.goT > 0) { G.goT -= dt; if (G.goT <= 0) $('count').hidden = true; }
+  const now = performance.now() / 1000;
+  while (G.taps.length && now - G.taps[0] > TAP_WINDOW) G.taps.shift();
+  if (G.game === 'tug') {
+    if (G.state === 'play') {
+      if (authority()) {
+        G.time += dt;
+        const w = tug.simulate(dt);
+        if (w >= 0) { G.winner = w; setState('over'); }
+      } else tug.coast(dt);
+    }
+    tug.place();
+    net.tick(dt);
+    return;
+  }
   if (G.state === 'play') {
-    const now = performance.now() / 1000;
-    while (G.taps.length && now - G.taps[0] > TAP_WINDOW) G.taps.shift();
     if (!G.auto) G.taps.length = 0;
     const want = Math.min(BOOST_MAX, G.taps.length / TAP_WINDOW * BOOST_PER_TAP_RATE);
     // 바로 따라가되 한 프레임에 툭 바뀌지 않게
@@ -537,13 +574,14 @@ function beginMatch(n, humans, view) {
   buildWorld(n, humans);
   buildHud();
   Object.assign(input, { left: false, right: false, fwd: false, turnT: 0 });
-  G.time = 0; G.countT = 3; G.lastN = -1; G.goT = 0; G.winner = -1; G.auto = null; G.homeArmed = false; G.events = []; G.sel = 'c'; G.boost = 0; G.taps = []; G.gLabel = '';
+  G.knot = { x: 0, z: 0, vx: 0, vz: 0 };
+  G.time = 0; G.countT = 3; G.lastN = -1; G.goT = 0; G.winner = -1; G.auto = null; G.homeArmed = false; G.events = []; G.sel = 'c'; G.boost = 0; G.taps = []; G.gLabel = ''; G.ringShown = -1;
   document.querySelectorAll('.ctl.on').forEach(el => el.classList.remove('on'));
   setState('count');
 }
 function startSolo() {
   audio();
-  G.role = 'solo'; G.me = 0; G.names = [];
+  G.role = 'solo'; G.me = 0; G.names = []; G.game = S.game;
   beginMatch(S.count, [0], S.count >= 6 ? 'third' : S.view);
 }
 function startHosted() {
@@ -553,15 +591,15 @@ function startHosted() {
   const view = n >= 6 ? 'third' : S.view;
   net.map = {};
   net.peers.forEach((slot, k) => { net.map[slot.id] = k + 1; });
-  G.me = 0;
+  G.me = 0; G.game = S.game;
   G.names = lobbyNames();
   beginMatch(n, humans, view);
-  net.broadcast({ k: 'start', n, view, humans, map: net.map, names: G.names });
+  net.broadcast({ k: 'start', game: G.game, n, view, humans, map: net.map, names: G.names });
 }
 function showResult() {
   if (G.state !== 'over') return;
   const w = G.winner;
-  $('resT').textContent = w === G.me ? t('win') : t('lose', { who: subj(nameOf(w)) });
+  $('resT').textContent = w === G.me ? t('win') : t(G.game === 'tug' ? 'loseTug' : 'lose', { who: subj(nameOf(w)) });
   $('resS').textContent = t('time', { s: numFmt().format(G.time) });
   $('again').hidden = G.role === 'guest';
   $('toMenu').hidden = G.role !== 'solo';
@@ -571,7 +609,7 @@ function showResult() {
   $('result').hidden = false;
 }
 function toMenu(err) {
-  G.role = 'solo'; G.me = 0;
+  G.role = 'solo'; G.me = 0; G.game = S.game;
   setState('menu');
   hidePanels();
   buildWorld(S.count, [0]);
@@ -602,6 +640,11 @@ function placeCamera() {
     const me = G.players[G.me];
     camera.fov = (aspect < 1 ? 80 : 70) + (reduce.matches ? 0 : G.boost * 2.5);
     camera.position.set(me.x, 1.55, me.z);
+    // 사방 줄다리기: 매듭이 빨리 움직일수록(누가 세게 끌수록) 화면이 흔들린다
+    if (G.game === 'tug' && G.state === 'play' && !reduce.matches) {
+      const s = Math.min(0.07, Math.hypot(G.knot.vx, G.knot.vz) * 0.06 + me.force * 0.004);
+      camera.position.x += (Math.random() - 0.5) * s; camera.position.y += (Math.random() - 0.5) * s;
+    }
     // 세로 화면은 하늘이 반을 먹으니 고개를 조금 더 숙인다
     camera.lookAt(me.x + Math.sin(me.h) * 10, aspect < 1 ? -0.4 : 0.9, me.z + Math.cos(me.h) * 10);
   } else {
@@ -615,16 +658,26 @@ function placeCamera() {
   camera.updateMatrixWorld();
 }
 const hand = new THREE.Vector3();
+function scaleTag(p, fp) {
+  // 이름표는 멀수록 키워서 화면에서 늘 읽히는 크기로(10m 안쪽은 그대로)
+  // 사방 줄다리기는 사람이 가까이 모여 있어 3인칭 이름표를 조금 작게
+  const k = Math.max(1, Math.hypot(camera.position.x - p.rx, camera.position.y - 2, camera.position.z - p.rz) / 10) * (fp ? 1.1 : G.game === 'tug' ? 0.6 : 0.85);
+  p.tag.scale.set(p.tag.userData.w * k, p.tag.userData.h * k, 1);
+  p.tag.position.y = 2.0 + 0.35 * (k - 1);
+}
 function sync() {
   const fp = G.view === 'first' && G.state !== 'menu' && G.state !== 'lobby';
+  if (G.game === 'tug') {
+    tug.sync(fp, G.me);
+    for (const p of G.players) scaleTag(p, fp);
+    pick.visible = false;
+    return;
+  }
   for (const p of G.players) {
     p.mesh.position.set(p.rx, 0, p.rz);
     p.mesh.rotation.y = p.rh;
     p.mesh.visible = !(fp && p.i === G.me);
-    // 이름표는 멀수록 키워서 화면에서 늘 읽히는 크기로(10m 안쪽은 그대로)
-    const k = Math.max(1, Math.hypot(camera.position.x - p.rx, camera.position.y - 2, camera.position.z - p.rz) / 10) * (fp ? 1.1 : 0.85);
-    p.tag.scale.set(p.tag.userData.w * k, p.tag.userData.h * k, 1);
-    p.tag.position.y = 2.0 + 0.35 * (k - 1);
+    scaleTag(p, fp);
     p.ring.visible = p.hold > 0;
     if (p.hold > 0) p.ring.geometry.setDrawRange(0, 6 * Math.max(1, Math.round(48 * Math.min(1, p.hold / HOLD))));
   }
@@ -698,6 +751,14 @@ function setTag(p) {
 }
 function updateHud() {
   if (G.state === 'menu' || G.state === 'lobby' || !G.players.length) return;
+  if (G.game === 'tug') {
+    G.hudEls.forEach((h, i) => { h.bar.style.transform = 'scaleX(' + Math.max(0, Math.min(1, G.players[i].prog)) + ')'; });
+    const me = G.players[G.me], st = Math.round(me.stamina * 100) / 100;
+    if (st !== G.ringShown) { G.ringShown = st; $('bPull').style.setProperty('--stam', st); }
+    const sub = me.stamina < 0.15 ? t('tired') : '';
+    if (sub !== G.gLabel) { G.gLabel = sub; $('psub').textContent = sub; }
+    return;
+  }
   const cnt = counts();
   G.hudEls.forEach((h, i) => {
     if (cnt[i] !== h.last) {
@@ -736,6 +797,10 @@ function handleEvent(e) {
   if (e.e === 'grab' && e.who === G.me) { sfx.grab(); buzz('light'); }
   else if (e.e === 'dep' && e.who === G.me) { sfx.deposit(); buzz('light'); }
   else if (e.e === 'stole' && e.from === G.me && G.players[e.by]) { toast(t('stole', { who: subj(nameOf(e.by)) })); sfx.stolen(G.players[e.by]); buzz('heavy'); }
+  else if (e.e === 'near' && G.players[e.who]) {
+    toast(e.who === G.me ? t('nearMe') : t('near', { who: subj(nameOf(e.who)) }));
+    if (e.who === G.me) buzz('light'); else sfx.stolen(G.players[e.who]);
+  }
   else if (e.e === 'hold') toast(e.who === G.me ? t('holdMe') : t('holdOther', { who: subj(nameOf(e.who)) }));
 }
 
@@ -900,7 +965,8 @@ const net = {
     this.sendT = 0.05;
     if (G.role === 'host') {
       this.broadcast({
-        k: 's', st: G.state, ct: r2(G.countT), tm: r2(G.time), w: G.winner,
+        ...(G.game === 'tug' ? tug.snapshot() : {}),
+        k: 's', g: G.game, st: G.state, ct: r2(G.countT), tm: r2(G.time), w: G.winner,
         b: G.players.filter(p => p.kind === 'bot').map(p => p.i),
         p: G.players.map(p => [r2(p.x), r2(p.z), r2(p.h), p.carry, r2(p.hold)]),
         c: G.cones.map(c => [r2(c.x), r2(c.z), c.owner, c.carrier]),
@@ -909,7 +975,8 @@ const net = {
       });
     } else {
       const me = G.players[G.me];
-      if (me) this.send({ k: 'me', x: r2(me.x), z: r2(me.z), h: r2(me.h) });
+      if (G.game === 'tug') this.send({ k: 'me', r: r2(tapRate()) });
+      else if (me) this.send({ k: 'me', x: r2(me.x), z: r2(me.z), h: r2(me.h) });
     }
   }
 };
@@ -1010,7 +1077,7 @@ function guestLeft(slot) {
   }
 }
 const lobbyNames = () => [myNick(), ...net.peers.map(p => p.nick || '')];
-function sendLobby() { net.broadcast({ k: 'lobby', peers: net.peers.map(p => p.id), names: lobbyNames() }); }
+function sendLobby() { net.broadcast({ k: 'lobby', game: S.game, peers: net.peers.map(p => p.id), names: lobbyNames() }); }
 function onGuestMsg(id, d) {
   if (d.k === 'nick') {
     const slot = net.peers.find(p => p.id === id);
@@ -1022,6 +1089,10 @@ function onGuestMsg(id, d) {
   }
   if (d.k !== 'me') return;
   const idx = net.map[id], p = idx !== undefined && G.players[idx];
+  if (G.game === 'tug') {
+    if (p && p.kind === 'human' && Number.isFinite(d.r)) p.remoteRate = Math.max(0, Math.min(TUG.MAX_RATE, d.r));
+    return;
+  }
   if (!p || p.kind !== 'human' || !Number.isFinite(d.x) || !Number.isFinite(d.z) || !Number.isFinite(d.h)) return;
   p.x = d.x; p.z = d.z; p.h = d.h;
   clamp(p);
@@ -1075,12 +1146,14 @@ function onHostMsg(d) {
   } else if (d.k === 'lobby') {
     net.peerIds = Array.isArray(d.peers) ? d.peers : [];
     net.names = Array.isArray(d.names) ? d.names.map(nickClean) : [];
+    net.game = d.game === 'tug' ? 'tug' : 'cones';
     if (G.state !== 'lobby') showLobby(); else renderLobby();
   } else if (d.k === 'start') {
     const idx = d.map && d.map[net.myId];
     if (!Number.isInteger(idx) || !Number.isInteger(d.n)) return;
     audio();
     G.me = idx;
+    G.game = d.game === 'tug' ? 'tug' : 'cones';
     G.names = Array.isArray(d.names) ? d.names.map(nickClean) : [];
     beginMatch(d.n, Array.isArray(d.humans) ? d.humans : [0, idx], d.view === 'third' ? 'third' : 'first');
   } else if (d.k === 'busy') {
@@ -1114,6 +1187,7 @@ function applySnap(d) {
     if (nm.join('\n') !== G.names.join('\n')) { G.names = nm; renamed = true; }
   }
   if (renamed) refreshNames();
+  if (G.game === 'tug' && d.g === 'tug') tug.apply(d);
   G.time = +d.tm || 0; G.countT = +d.ct || 0; G.winner = Number.isInteger(d.w) ? d.w : -1;
   (Array.isArray(d.ev) ? d.ev : []).forEach(e => { if (e && typeof e === 'object') handleEvent(e); });
   if (d.st !== G.state && ['count', 'play', 'over'].includes(d.st)) setState(d.st);
@@ -1150,6 +1224,12 @@ function renderLobby() {
   $('lobStart').hidden = !host || inviting;
   $('lobNote').hidden = inviting;
   $('lobNote').textContent = host ? t('fill') : t('waitHost');
+  $('lobGameWrap').hidden = !host || inviting;
+  $('lobGame').hidden = host;
+  $('lobGame').textContent = t('gameIs', { g: gameName(net.game) });
+  $('lg-' + S.game).checked = true;
+  const want = host ? S.game : net.game || 'cones';
+  if (G.game !== want) { G.game = want; G.players = []; }
   const six = Math.max(3, total) >= 6;
   $('lv-first').disabled = six;
   $('lv-first').checked = !six && S.view === 'first';
@@ -1253,6 +1333,15 @@ bindTap($('bL'), () => stepSpot(1));
 bindTap($('bR'), () => stepSpot(-1));
 bindTap($('bG'), act);
 bindTap($('bRun'), sprint);
+// 사방 줄다리기: 당기기 한 번(누르고 있는 건 한 번). 화면 아무 데나 눌러도 당긴다
+function pull() {
+  if (G.state !== 'play' || G.game !== 'tug') return;
+  G.taps.push(performance.now() / 1000);
+  sfx.step(Math.min(1, tapRate() / TUG.MAX_RATE));
+  buzz('tap');
+  coachOff();
+}
+bindTap($('bPull'), pull);
 function goHome() { if (G.state === 'play' || G.state === 'count') G.auto = { home: true }; }
 $('homeBtn').addEventListener('click', goHome);
 
@@ -1261,6 +1350,7 @@ const proj = new THREE.Vector3();
 canvas.addEventListener('pointerdown', e => {
   if (G.state !== 'play' && G.state !== 'count') return;
   audio();
+  if (G.game === 'tug') { pull(); return; }
   const me = G.players[G.me], W = innerWidth, H = innerHeight;
   let best = null, bd = 90;
   for (const c of G.cones) {
@@ -1277,6 +1367,10 @@ canvas.addEventListener('pointerdown', e => {
 
 addEventListener('keydown', e => {
   if ((G.state !== 'play' && G.state !== 'count') || e.repeat) return;
+  if (G.game === 'tug') {
+    if (['Space', 'Enter', 'ArrowUp', 'KeyW'].includes(e.code)) { e.preventDefault(); pull(); }
+    return;
+  }
   if (e.code === 'ArrowLeft' || e.code === 'KeyA') { e.preventDefault(); stepSpot(1); }
   else if (e.code === 'ArrowRight' || e.code === 'KeyD') { e.preventDefault(); stepSpot(-1); }
   else if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); act(); }
@@ -1285,7 +1379,15 @@ addEventListener('keydown', e => {
 });
 
 /* ---------- 시작 판 ---------- */
+function syncGameText() {
+  const tg = S.game === 'tug';
+  $('ttl').textContent = gameName(S.game);
+  $('rule').textContent = t(tg ? 'ruleTug' : 'rule');
+  $('keys').textContent = t(tg ? 'keysTug' : 'keys');
+}
 function syncMenu() {
+  $('g-' + S.game).checked = true;
+  syncGameText();
   const six = S.count >= 6;
   $('v-first').disabled = six;
   $('v-first').checked = !six && S.view === 'first';
@@ -1306,10 +1408,13 @@ function applyLang() {
   document.querySelectorAll('[data-aria]').forEach(el => { el.setAttribute('aria-label', t(el.dataset.aria)); });
   document.querySelectorAll('[data-n]').forEach(el => { el.textContent = t('n', { n: el.dataset.n }); });
   $('optNick').placeholder = t('nickPh');
+  syncGameText();
   refreshNames();
   G.gLabel = '';
 }
 document.querySelectorAll('input[name="view"]').forEach(el => el.addEventListener('change', () => { S.view = el.value; save(); syncMenu(); }));
+document.querySelectorAll('input[name="game"]').forEach(el => el.addEventListener('change', () => { S.game = el.value; save(); syncMenu(); G.game = S.game; buildWorld(S.count, [0]); }));
+document.querySelectorAll('input[name="lgame"]').forEach(el => el.addEventListener('change', () => { S.game = el.value; save(); syncMenu(); sendLobby(); renderLobby(); }));
 document.querySelectorAll('input[name="lview"]').forEach(el => el.addEventListener('change', () => { S.view = el.value; save(); syncMenu(); }));
 document.querySelectorAll('input[name="count"]').forEach(el => el.addEventListener('change', () => { S.count = +el.value; save(); syncMenu(); buildWorld(S.count, [0]); }));
 $('lang').addEventListener('change', e => { S.lang = e.target.value; save(); applyLang(); });
@@ -1466,7 +1571,17 @@ onAdFree(() => { toast(t('adFreeDone')); if (!$('settings').hidden) syncSettings
 // 처음 두 판만, 출발하고 5초 또는 가져오기를 처음 누를 때까지
 let coachLeft = 2;
 try { coachLeft = Math.max(0, 2 - (+localStorage.getItem('gokkal-coached') || 0)); } catch (_) {}
-function coachOn() {
+function coachOn(game) {
+  if (game === 'tug') {
+    let n = 0;
+    try { n = +localStorage.getItem('gokkal-coached-tug') || 0; localStorage.setItem('gokkal-coached-tug', String(n + 1)); } catch (_) {}
+    if (n >= 2) return;
+    const el = $('coach');
+    el.textContent = t('coachTug'); el.hidden = false;
+    clearTimeout(coachOn.timer);
+    coachOn.timer = setTimeout(coachOff, 6000);
+    return;
+  }
   if (coachLeft <= 0) return;
   coachLeft--;
   try { localStorage.setItem('gokkal-coached', String(2 - coachLeft)); } catch (_) {}
