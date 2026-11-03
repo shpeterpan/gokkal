@@ -12,8 +12,9 @@ const R = 15, BASE_D = 12.5, BASE_R = 1.8, PR = 0.45;
 const GRAB_R = 1.7;   // 봇이 손을 뻗는 거리
 const TOUCH_R = 1.2;  // 사람은 고깔에 닿으면 저절로 집는다
 const SPEED = 5.2, BOT_SPEED = 4.3, SNAP = Math.PI / 6;
-// 달리기: 그냥 뛰면 봇보다 조금 느리고, 달리기를 누를 때마다 속도가 붙고 금방 식는다. 초당 세 번쯤 누르면 가장 빠르다.
-const RUN_BASE = 4.0, BOOST_TAP = 0.8, BOOST_MAX = 3.6, BOOST_DECAY = 2.4;
+// 달리기: 최근 0.8초 동안 누른 빠르기가 곧 속도다(누르고 있는 건 한 번). 안 누르면 봇보다 조금 느리다.
+// 초당 1번 4.6, 2번 5.2, 4번 6.4, 6번 이상 7.6
+const RUN_BASE = 4.0, BOOST_PER_TAP_RATE = 0.6, BOOST_MAX = 3.6, TAP_WINDOW = 0.8;
 const CONES = 5, NEED = 3, HOLD = 1;
 const COLORS = [0x2F6FD6, 0x1F9A5F, 0xE3AE0E, 0xC8377A, 0x2B3138, 0x1597B8];
 const reduce = matchMedia('(prefers-reduced-motion: reduce)');
@@ -231,7 +232,7 @@ function makePlayer(color) {
 const G = {
   state: 'menu', role: 'solo', me: 0, players: [], cones: [], world: null, view: 'first',
   time: 0, countT: 0, lastN: -1, goT: 0, winner: -1, orbit: 0.6, hudEls: [], auto: null, homeArmed: false,
-  events: [], sendT: 0, resultTimer: 0, boost: 0, names: []
+  events: [], sendT: 0, resultTimer: 0, boost: 0, taps: [], names: []
 };
 const input = { left: false, right: false, fwd: false, turnT: 0 };
 const P = () => G.players;
@@ -464,8 +465,8 @@ function sprint() {
   if (G.state !== 'play') return;
   if (!G.auto) act();
   if (!G.auto) return;
-  G.boost = Math.min(BOOST_MAX, G.boost + BOOST_TAP);
-  sfx.step(G.boost / BOOST_MAX);
+  G.taps.push(performance.now() / 1000);
+  sfx.step(Math.min(1, G.taps.length / TAP_WINDOW * BOOST_PER_TAP_RATE / BOOST_MAX));
   buzz('tap');
   coachOff();
 }
@@ -508,8 +509,12 @@ function update(dt) {
   }
   if (G.goT > 0) { G.goT -= dt; if (G.goT <= 0) $('count').hidden = true; }
   if (G.state === 'play') {
-    G.boost = Math.max(0, G.boost - BOOST_DECAY * dt);
-    if (!G.auto) G.boost = 0;
+    const now = performance.now() / 1000;
+    while (G.taps.length && now - G.taps[0] > TAP_WINDOW) G.taps.shift();
+    if (!G.auto) G.taps.length = 0;
+    const want = Math.min(BOOST_MAX, G.taps.length / TAP_WINDOW * BOOST_PER_TAP_RATE);
+    // 바로 따라가되 한 프레임에 툭 바뀌지 않게
+    G.boost += (want - G.boost) * Math.min(1, dt * 12);
     meUpdate(dt);
     if (authority()) simulate(dt);
   }
@@ -532,7 +537,7 @@ function beginMatch(n, humans, view) {
   buildWorld(n, humans);
   buildHud();
   Object.assign(input, { left: false, right: false, fwd: false, turnT: 0 });
-  G.time = 0; G.countT = 3; G.lastN = -1; G.goT = 0; G.winner = -1; G.auto = null; G.homeArmed = false; G.events = []; G.sel = 'c'; G.boost = 0; G.gLabel = '';
+  G.time = 0; G.countT = 3; G.lastN = -1; G.goT = 0; G.winner = -1; G.auto = null; G.homeArmed = false; G.events = []; G.sel = 'c'; G.boost = 0; G.taps = []; G.gLabel = '';
   document.querySelectorAll('.ctl.on').forEach(el => el.classList.remove('on'));
   setState('count');
 }
