@@ -1516,8 +1516,10 @@ $('sheetScrim').addEventListener('click', closeSettings);
 addEventListener('keydown', e => { if (e.key === 'Escape' && !$('settings').hidden) closeSettings(); });
 (() => {
   const sheet = $('settings');
-  let y0 = null, dy = 0;
-  const start = e => { if (e.target.closest('button, input, select, a')) return; y0 = e.clientY; dy = 0; sheet.setPointerCapture?.(e.pointerId); };
+  // 끄는 동안은 transition 을 꺼서 손가락을 바로 따라온다(켜 두면 0.2초씩 늦게 따라왔다). 놓으면 제자리로 미끄러진다(움직임 줄이기면 바로).
+  // 80px 넘게 내리거나 40px 넘게 빠르게(0.6px/ms) 튕기면 닫힌다.
+  let y0 = null, t0 = 0, dy = 0;
+  const start = e => { if (e.target.closest('button, input, select, a')) return; y0 = e.clientY; t0 = performance.now(); dy = 0; sheet.style.transition = 'none'; sheet.setPointerCapture?.(e.pointerId); };
   sheet.querySelector('.grabber').parentElement.addEventListener('pointerdown', e => { if (e.target.closest('.grabber, .sheethead')) start(e); });
   sheet.addEventListener('pointermove', e => {
     if (y0 === null) return;
@@ -1527,7 +1529,8 @@ addEventListener('keydown', e => { if (e.key === 'Escape' && !$('settings').hidd
   const end = () => {
     if (y0 === null) return;
     y0 = null;
-    if (dy > 80) closeSettings();
+    sheet.style.transition = '';
+    if (dy > 80 || (dy >= 40 && dy / Math.max(1, performance.now() - t0) > 0.6)) closeSettings();
     sheet.style.transform = '';
   };
   sheet.addEventListener('pointerup', end);
